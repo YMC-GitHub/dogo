@@ -41,7 +41,7 @@ on:
       dockerfile_path:
         description: 'Path to Dockerfile'
         required: false
-        default: './Dockerfile.yogo'
+        default: './Dockerfile.dogo'
         type: string
       custom_tags:
         description: 'Extra custom image tags, comma separated'
