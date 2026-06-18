@@ -102,13 +102,18 @@ jobs:
           REPO_LOWER=$(echo "$REPO_RAW" | tr '[:upper:]' '[:lower:]')
           echo "repo_lower=$REPO_LOWER" >> $GITHUB_OUTPUT
 
+          # 更好的版本检测
           VERSION=""
-          RAW_REF="${{ github.ref }}"
           if [[ -n "${{ inputs.tag_version }}" ]]; then
             VERSION="${{ inputs.tag_version }}"
           elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]]; then
-            VERSION="${RAW_REF#refs/tags/}"
+            # 使用 github.ref_name 更简洁
+            VERSION="${{ github.ref_name }}"
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # 如果是手动触发但没有指定 tag_version，尝试从 ref 获取
+            VERSION="${{ github.ref_name }}"
           fi
+          
           echo "release_version=$VERSION" >> $GITHUB_OUTPUT
 
           PUBLISH_RELEASE="false"
@@ -125,7 +130,7 @@ jobs:
 
           echo "===== Runtime Flags ====="
           echo "debug_mode: $DEBUG_MODE"
-          echo "is_main: ${{ steps.flags.outputs.is_main }}"
+          echo "is_main: $is_main"
           echo "repo_lower: $REPO_LOWER"
           echo "release_version: $VERSION"
           echo "publish_release: $PUBLISH_RELEASE"
