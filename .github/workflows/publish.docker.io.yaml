@@ -143,7 +143,7 @@ jobs:
       - name: Print debug runtime info
         run: |
           echo "🔧 Debug Mode: ${{ inputs.debug_mode }}"
-          echo "📦 Push Registry Target: ${{ steps.flags.outputs.push_reg_target}}"
+          echo "📦 Push Registry Target: ${{ steps.flags.outputs.push_reg_target }}"
           echo "🌐 China Mirror Enable: ${{ inputs.use_china_mirror }}"
           echo "📡 Alpine Mirror: ${{ inputs.alpine_mirror }}"
           echo "🏗️ Build Platforms: ${{ inputs.target_platforms }}"
@@ -355,7 +355,7 @@ jobs:
         run: |
           echo "🎉 Build & Push Finished Successfully"
           echo "========================================="
-          echo "📦 Target Registry Mode: ${{ inputs.push_registry }}"
+          echo "📦 Target Registry Mode: ${{ steps.flags.outputs.push_reg_target }}"
           echo "🏷️ All Pushed Image Tags: ${{ steps.combine-tags.outputs.full_image_tags }}"
           echo "📤 Local Binary Export Path: ${{ env.BIN_OUT_DIR }}/"
           echo "🌐 Domestic Mirror Accelerate: ${{ inputs.use_china_mirror }}"
