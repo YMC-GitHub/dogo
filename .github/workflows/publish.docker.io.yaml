@@ -104,25 +104,18 @@ jobs:
 
           VERSION=""
           RAW_REF="${{ github.ref }}"
-          # 优先手动输入
           if [[ -n "${{ inputs.tag_version }}" ]]; then
             VERSION="${{ inputs.tag_version }}"
-          # 自动tag推送兜底
           elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]]; then
             VERSION="${RAW_REF#refs/tags/}"
           fi
           echo "release_version=$VERSION" >> $GITHUB_OUTPUT
 
           PUBLISH_RELEASE="false"
-          if [[ "$DEBUG_MODE" != "true" && "${{ inputs.publish_github_release }}" == "true" && -n "$VERSION" ]]; then
+          if [[ "$DEBUG_MODE" != "true" && ( "${{ inputs.publish_github_release }}" == "true" || ( "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ) ) && -n "$VERSION" ]]; then
             PUBLISH_RELEASE="true"
           fi
           echo "publish_release=$PUBLISH_RELEASE" >> $GITHUB_OUTPUT
-
-          PUBLISH_RELEASE="false"
-          if [[ "$DEBUG_MODE" != "true" && ( "${{ inputs.publish_github_release }}" == "true" || "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ) && -n "$VERSION" ]]; then
-            PUBLISH_RELEASE="true"
-          fi
 
           PUSH_ENABLED="true"
           if [[ "$DEBUG_MODE" == "true" ]]; then
@@ -132,7 +125,7 @@ jobs:
 
           echo "===== Runtime Flags ====="
           echo "debug_mode: $DEBUG_MODE"
-          echo "is_main: $is_main"
+          echo "is_main: ${{ steps.flags.outputs.is_main }}"
           echo "repo_lower: $REPO_LOWER"
           echo "release_version: $VERSION"
           echo "publish_release: $PUBLISH_RELEASE"
@@ -150,6 +143,7 @@ jobs:
           echo "🏷️ Custom Extra Tags: ${{ inputs.custom_tags }}"
           echo "🔖 Git Ref: ${{ github.ref }}"
           echo "🔑 Commit SHA: ${{ github.sha }}"
+          echo "📌 Detected Release Version: ${{ steps.flags.outputs.release_version }}"
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -170,6 +164,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # 修复：原生type=ref,event=tag自动捕获git tag，不依赖前置steps输出
       - name: Generate Docker Hub image metadata tags
         id: meta-dockerhub
         if: ${{ inputs.push_registry == 'dockerhub' || inputs.push_registry == 'both' }}
@@ -177,6 +172,7 @@ jobs:
         with:
           images: ${{ env.DOCKER_REGISTRY }}/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.BINARY_NAME }}
           tags: |
+            type=raw,value=${{ inputs.tag_version }},enable=${{ inputs.tag_version != '' }}
             type=ref,event=tag
             type=raw,value=latest,enable=${{ steps.flags.outputs.is_main == 'true' }}
             type=raw,value=debug-${{ github.sha }},enable=${{ steps.flags.outputs.debug_mode == 'true' }}
@@ -189,6 +185,7 @@ jobs:
         with:
           images: ${{ env.GHCR_REGISTRY }}/${{ steps.flags.outputs.repo_lower }}
           tags: |
+            type=raw,value=${{ inputs.tag_version }},enable=${{ inputs.tag_version != '' }}
             type=ref,event=tag
             type=raw,value=latest,enable=${{ steps.flags.outputs.is_main == 'true' }}
             type=raw,value=debug-${{ github.sha }},enable=${{ steps.flags.outputs.debug_mode == 'true' }}
@@ -221,16 +218,17 @@ jobs:
           DOCKER_CLEAN=$(clean_tags "$DOCKER_TAGS_RAW")
           GHCR_CLEAN=$(clean_tags "$GHCR_TAGS_RAW")
 
-          if [[ -n "$DOCKER_CLEAN" && -n "$GHCR_CLEAN" ]]; then
-            FINAL_TAGS="${DOCKER_CLEAN},${GHCR_CLEAN}"
-          elif [[ -n "$DOCKER_CLEAN" ]]; then
-            FINAL_TAGS="$DOCKER_CLEAN"
-          elif [[ -n "$GHCR_CLEAN" ]]; then
-            FINAL_TAGS="$GHCR_CLEAN"
-          fi
+          tag_list=()
+          [[ -n "$DOCKER_CLEAN" ]] && tag_list+=("$DOCKER_CLEAN")
+          [[ -n "$GHCR_CLEAN" ]] && tag_list+=("$GHCR_CLEAN")
+          FINAL_TAGS=$(IFS=,; echo "${tag_list[*]}")
 
           echo "full_image_tags=$FINAL_TAGS" >> "$GITHUB_OUTPUT"
           echo "Combined push tags: $FINAL_TAGS"
+          if [[ -z "$FINAL_TAGS" && "${{ steps.flags.outputs.push_enabled }}" == "true" ]]; then
+            echo "ERROR: No valid image tags generated, cannot push images"
+            exit 1
+          fi
 
       # 第一段构建：runtime，本地load镜像、生成完整缓存、上传gha远程缓存，不推送
       - name: Build local runtime image & generate full cache
@@ -272,12 +270,11 @@ jobs:
           cd ${{ env.BIN_OUT_DIR }}
           chmod +x ./${{ env.BINARY_NAME }}
           ./${{ env.BINARY_NAME }} --version || ./${{ env.BINARY_NAME }} --help || echo "Linux binary execute test ok"
-          if [ -f ./${{ env.BINARY_NAME }}.exe ]; then
-            echo "✅ Windows binary yogo.exe exported successfully"
-          else
+          if [ ! -f ./${{ env.BINARY_NAME }}.exe ]; then
             echo "❌ Windows binary missing"
             exit 1
           fi
+          echo "✅ Windows binary exported successfully"
           ls -lh
 
       # 第三段构建：复用缓存，仅推送镜像到双仓库
@@ -385,7 +382,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ needs.build-export-bin-and-push-image.outputs.release_version }}
-          name: ${{ needs.build-export-bin-and-push-image.outputs.release_version }}
+          name: Release ${{ needs.build-export-bin-and-push-image.outputs.release_version }}
           files: ${{ env.RELEASE_ARTIFACT_DIR }}/*
           generate_release_notes: true
           draft: false
