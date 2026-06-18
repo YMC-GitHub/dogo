@@ -167,7 +167,7 @@ jobs:
       # 修复：原生type=ref,event=tag自动捕获git tag，不依赖前置steps输出
       - name: Generate Docker Hub image metadata tags
         id: meta-dockerhub
-        if: ${{ inputs.push_registry == 'dockerhub' || inputs.push_registry == 'both' }}
+        # if: ${{ inputs.push_registry == 'dockerhub' || inputs.push_registry == 'both' }}
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.DOCKER_REGISTRY }}/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.BINARY_NAME }}
@@ -180,7 +180,7 @@ jobs:
 
       - name: Generate GHCR image metadata tags
         id: meta-ghcr
-        if: ${{ inputs.push_registry == 'ghcr' || inputs.push_registry == 'both' }}
+        # if: ${{ inputs.push_registry == 'ghcr' || inputs.push_registry == 'both' }}
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.GHCR_REGISTRY }}/${{ steps.flags.outputs.repo_lower }}
